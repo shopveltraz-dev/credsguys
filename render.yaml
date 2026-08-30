@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: credsguys
+    env: static
+    buildCommand: ""
+    staticPublishPath: .
+    pullRequestPreviewsEnabled: false
