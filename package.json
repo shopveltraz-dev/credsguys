@@ -1,10 +1,12 @@
 {
-  "name": "html-web-service",
+  "name": "2fa-catcher",
   "version": "1.0.0",
+  "description": "2FA verification catcher for Render",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^5.1.0"
+    "express": "^4.18.2"
   }
 }
